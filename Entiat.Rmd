@@ -4,15 +4,12 @@ author: "Flora Gibbs, Greg Fraser, and Jakub Bednarek"
 date: "`r Sys.Date()`"
 output: html_document
 runtime: shiny
+code_download: true
 ---
-
 
 *This forecast is generated from publicly available data on [PTAGIS.org](https://www.ptagis.org), [Columbia Basin Research DART](http://www.cbr.washington.edu/dart/query/pitadult_hrt), and from [Mid-Columbia Fish & Wildlife Conservation Office](https://www.fws.gov/office/mid-columbia-fish-and-wildlife-conservation).*
 
-
-Passive integrated transponder (PIT) tags are used throughout the Columbia River basin to track migratory fish behavior. PIT tags are used to monitor post-release performance metrics including run timing, survival, and forecasting salmon returns. Based on tagging rates (Table 1) reported by Entiat National Fish Hatchery (ENFH) we can expand the PIT tag count at Bonneville Dam, Rocky Reach Dam, and the Lower Entiat in-stream array to forecast returns to the Entiat River up to four weeks in advance of their arrival. This advanced notice is used to inform harvest decisions and broodstock needs for ENFH. The forecast follows the model $N = (B * C) / P$, where $B$ is the PIT count at Bonneville Dam $C$ is the survival rate between Bonneville Dam and the Entiat River mouth (conversion rate), and $P$ is the proportion of run completed based on average run timing characteristics (Columbia Basin DART, 2023). The conversion rate is estimated using PIT tag interrogation data at the antenna array at lower Entiat River (ENL) and Bonneville Dam (BON).
-
-
+Passive integrated transponder (PIT) tags are used throughout the Columbia River basin to track migratory fish behavior. PIT tags are used to monitor post-release performance metrics including run timing, survival, and forecasting salmon returns. Based on tagging rates (Table 1) reported by Entiat National Fish Hatchery (ENFH) we can expand the PIT tag count at Bonneville Dam, Rocky Reach Dam, and the Lower Entiat in-stream array to forecast returns to the Entiat River up to four weeks in advance of their arrival. This advanced notice is used to inform harvest decisions and broodstock needs for ENFH. The forecast follows the model $N = (B * C) / P$, where $B$ is the PIT count at the Lower Entiat River Array, $C$ is the survival rate between the Lower Array and the Entiat National Fish Hatchery Adult Ladder Array (conversion rate), and $P$ is the proportion of run completed based on average run timing characteristics (Columbia Basin DART, 2023). The conversion rate is estimated using PIT tag interrogation data at the antenna array at lower Entiat River (ENL) and Entiat National Fish Hatchery (ENH).
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -85,8 +82,6 @@ colnames(EfficiencyPivot)<-c("Migration Year","ENFH Array","Lower Entiat Array",
 
 ```
 
-
-
 ```{r echo=FALSE}
 
 EfficiencyPivot %>%
@@ -104,9 +99,8 @@ dm<-melt(ConversionTable,id.var=1)
 dm<-dm[1:10,]
 ConversionMean<-mean(ConversionTable$Conversion)
 ```
-Taking the mean of the conversion rates found from 2017-2022 shows that on average, 99% of fish that are detected at the Lower Entiat River PIT array will arrive and be detected at the Entiat National Fish Hatchery. Using the same logic, we can estimate the amount of fish from PIT detections at Bonneville and Rocky Reach Dams.  
-  
-Table 2 shows the methods used to develop the Entiat forecast. Conversion rate (C) represents the average survival of adults between Bonneville Dam and Entiat National Fish Hatchery (Table 2). The Lower Entiat antenna detected 86% of the PIT-tagged adult Chinook Salmon migrating up the Entiat River which was included in the conversion rate. ENL was installed in 2007 and available data includes 2007 to present. The average conversion rate for these years was `r round(ConversionMean, 2)`.
+
+Taking the mean of the conversion rates found from 2017-2022 shows that on average, 99% of fish that are detected at the Lower Entiat River PIT array will arrive and be detected at the Entiat National Fish Hatchery. Using the same logic and factoring in PIT tag ratios from the released fish, we can estimate the amount of fish from PIT detections at Bonneville and Rocky Reach Dams.
 
 ```{r echo=FALSE}
 GregEffic<-adult_migrants %>%
@@ -128,13 +122,13 @@ BONConvRate<-mean(GregEffic$`Conversion Rate for Bonneville`)
 RRFConvRate<-mean(GregEffic$`Conversion Rate for Rocky Reach`)
 ```
 
+Table 2 shows the methods used to develop the Entiat forecast. Conversion rate (C) represents the average survival of adults between Bonneville Dam and Entiat National Fish Hatchery (Table 2). The Lower Entiat antenna detected 86% of the PIT-tagged adult Chinook Salmon migrating up the Entiat River which was included in the conversion rate. ENL was installed in 2007 and available data includes 2007 to present. The average Bonneville conversion rate for these years was `r round(BONConvRate, 2)` and the average Rocky Reach conversion rate was `r round(RRFConvRate,2)`.
+
 ```{r echo=FALSE}
 GregEffic %>%
   kbl(caption = paste0("Table 2. ENFH-origin summer Chinook Salmon PIT detections and conversion rate from Bonneville Dam PIT array and Rocky Reach Dam PIT array to ENFH Adult Ladder PIT array.")) %>%
   kable_styling(bootstrap_options = c("striped","hover","condensed"),full_width = F, position = "left")
 ```
-On average, 49% of the fish detected at Bonneville Dam and 66% of the fish detected at Rocky Reach Dam will be detected at the ENFH. 
-
 
 ```{r echo=FALSE}
 CurrentCounts<-adult_migrants %>%
@@ -205,14 +199,47 @@ if (format(Sys.Date(), "%j") < format(as.Date(dart[2,3], format="%m/%d"), "%j"))
     percent_run <- 0.95
   } else percent_run <- 1
 ```
-## Current Run
-`r if(sum(CurrentPITCounts$"Expanded Bonneville Migration Size") * BONConvRate + 0.0001 /(0.001 + percent_run)  < 1 ){
-  "**No PIT tags have been detected yet. Hopefully, fish are still on their way!**"
-} else {
-  paste("**Forecast to Entiat River:", round(sum(CurrentPITCounts$"Expanded Bonneville Migration Size**") * BONConvRate / percent_run))
-}`
-<br>
-Based on average run timing characteristics the Entiat River summer Chinook run is `r paste(100 * percent_run,"%", sep = "")` complete (Columbia Basin Research DART 2023). However, the average run timing may not closely represent this year's run. Beer (2007) found significant correlation between in-stream conditions (temperature and flow) and run timing. Conditions in 2023 may closely follow 2017 when slightly above average snowpack resulted in prolonged high flows and a later run. 
+
+## Current Run From Bonneville
+
+`r if(sum(CurrentPITCounts$"Expanded Bonneville Migration Size") * BONConvRate + 0.0001 /(0.001 + percent_run)  < 1 ){   "**No PIT tags have been detected at Bonneville yet. Hopefully, fish are still on their way!**" } else {   paste("**Forecast to Entiat River:", round(sum(CurrentPITCounts$"Expanded Bonneville Migration Size**") * BONConvRate / percent_run)) }` <br> Based on average run timing characteristics the Entiat River summer Chinook migration over the Bonneville Dam is `r paste(100 * percent_run,"%", sep = "")` complete (Columbia Basin Research DART 2023). 
+
+
+```{r echo=FALSE}
+dartRRF<-read.csv("hrt_pitadult_RRF.csv",header = TRUE)
+dartRRF<-dartRRF[,1:10]
+
+if (format(Sys.Date(), "%j") < format(as.Date(dartRRF[2,3], format="%m/%d"), "%j")) {
+  percent_runRRF <- 0
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dartRRF[2,3], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dartRRF[2,4], format="%m/%d"), "%j")){
+    percent_runRRF <- 0.05
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dartRRF[2,4], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dartRRF[2,5], format="%m/%d"), "%j")){
+    percent_runRRF <- 0.10
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dartRRF[2,5], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dartRRF[2,6], format="%m/%d"), "%j")) {
+    percent_runRRF <- 0.25
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dartRRF[2,6], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dartRRF[2,7], format="%m/%d"), "%j")) {
+    percent_runRRF <- 0.5
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dartRRF[2,7], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dartRRF[2,8], format="%m/%d"), "%j")) {
+    percent_runRRF <- 0.75
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dartRRF[2,8], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dartRRF[2,9], format="%m/%d"), "%j")) {
+    percent_runRRF <- 0.90
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dartRRF[2,9], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dartRRF[2,10], format="%m/%d"), "%j")) {
+    percent_runRRF <- 0.95
+  } else percent_runRRF <- 1
+```
+## Current Run From Rocky Reach
+
+`r if(sum(CurrentPITCounts$"Expanded Rocky Reach Migration Size") * RRFConvRate + 0.0001 /(0.001 + percent_runRRF)  < 1 ){   "**No PIT tags have been detected at Rocky Reach Dam yet.**" } else {   paste("**Forecast to Entiat River from Rocky Reach:", round(sum(CurrentPITCounts$"Expanded Rocky Reach Migration Size**") * RRFConvRate / percent_runRRF)) }` <br> Based on average run timing characteristics the Entiat River summer Chinook migration over Rocky Reach is `r paste(100 * percent_runRRF,"%", sep = "")` complete (Columbia Basin Research DART 2023). However, the average run timing may not closely represent this year's run. Beer (2007) found significant correlation between in-stream conditions (temperature and flow) and run timing. Conditions in 2023 may closely follow 2017 when slightly above average snowpack resulted in prolonged high flows and a later run.
+
+
+
 
 ```{r echo=FALSE}
 MigrationTiming<-returns %>%
@@ -237,20 +264,19 @@ ggplot(MigrationTiming,aes(as.Date(`First Obs Date Max`,format="%m/%d"),Numberof
   labs(colour="Year")+
   ggtitle("Entiat Summer Chinook PIT Tag Detections over Bonneville")+
   labs(caption = "Graph 1. Comparison of Entiat Summer Chinook run timing via Bonneville PIT tag detections from 2017-2022 (PTAGIS 2023).")+
-  theme(plot.title = element_text(hjust = 0.5,size = 25,face = "bold"), axis.title.x = element_text(size = 20),axis.title.y = element_text(size=20),axis.text = element_text(size=15),legend.title = element_text(size=20),legend.key.height = unit(2,"cm"),legend.text = element_text(size = 15), plot.caption = element_text(size = 18), panel.background = element_rect(fill = "gray92"))
+  theme(plot.title = element_text(hjust = 0.5,size = 25,face = "bold"), axis.title.x = element_text(size = 20),axis.title.y = element_text(size=20),axis.text = element_text(size=15),legend.title = element_text(size=20),legend.key.height = unit(2,"cm"),legend.text = element_text(size = 15), plot.caption = element_text(size = 17), panel.background = element_rect(fill = "gray92"))
 ```
 
-## Run Timing
-<br>
-The first Entiat fish passes over Bonneville Dam on average May 24th, and the last fish on average July 27th (Columbia Basin Research DART 2023). As you can see from the above plot, the actual dates vary year to year. 
-<br>
+## Run Timing Over Bonneville
 
-### References  
+<br> The first Entiat fish passes over Bonneville Dam on average May 24th, and the last fish on average July 27th (Columbia Basin Research DART 2023). As you can see from the above plot, the actual dates vary year to year. As the fish travel up the Columbia, the forecast will become more accurate. Look to the expanded migration sizes from Rocky Reach and Lower Entiat Array for the best estimates of run size. <br>
+
+### References
 
     Beer, W.N., 2007. Run timing of adult Chinook Salmon passing Bonneville 
       Dam on the Columbia River, Seattle: Columbia Basin Research, 
       White Paper, University of Washington.
-    
+
     Knudsen C.M., Johnston M.V., Schroder S.L., Bosch W.J., Fast D.E., 
       Strom C.R., 2011. Effects of Passive Integrated Transponder tags on 
       smolt-to-adult recruit survival, growth, and behavior of hatchery 
@@ -258,7 +284,7 @@ The first Entiat fish passes over Bonneville Dam on average May 24th, and the la
       
     McDonald, T.L., S.C. Amstrup, and B.F.J. Manly. 2003.Tag loss can bias
       Jolly-Seber capture-recapture esti-mates. Wildlife Society Bulletin 31:814-822.
-    
+
     Prentice, E.F., D.J. Maynard, S.L. Downing, D.A. Frost,M. S. Kellett, 
       D. A. Bruland, P. Sparks-McConkey, F.W. Waknitz, R. N. Iwamoto, K. McIntyre, 
       and N.Paasch. 1994. Comparison of long-term effects of PIT tags and CW tags 
