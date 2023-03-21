@@ -1,0 +1,265 @@
+---
+title: "Entiat Forecast"
+author: "Flora Gibbs, Greg Fraser, and Jakub Bednarek"
+date: "`r Sys.Date()`"
+output: html_document
+runtime: shiny
+---
+
+
+*This forecast is generated from publicly available data on [PTAGIS.org](https://www.ptagis.org), [Columbia Basin Research DART](http://www.cbr.washington.edu/dart/query/pitadult_hrt), and from [Mid-Columbia Fish & Wildlife Conservation Office](https://www.fws.gov/office/mid-columbia-fish-and-wildlife-conservation).*
+
+
+Passive integrated transponder (PIT) tags are used throughout the Columbia River basin to track migratory fish behavior. PIT tags are used to monitor post-release performance metrics including run timing, survival, and forecasting salmon returns. Based on tagging rates (Table 1) reported by Entiat National Fish Hatchery (ENFH) we can expand the PIT tag count at Bonneville Dam, Rocky Reach Dam, and the Lower Entiat in-stream array to forecast returns to the Entiat River up to four weeks in advance of their arrival. This advanced notice is used to inform harvest decisions and broodstock needs for ENFH. The forecast follows the model $N = (B * C) / P$, where $B$ is the PIT count at Bonneville Dam $C$ is the survival rate between Bonneville Dam and the Entiat River mouth (conversion rate), and $P$ is the proportion of run completed based on average run timing characteristics (Columbia Basin DART, 2023). The conversion rate is estimated using PIT tag interrogation data at the antenna array at lower Entiat River (ENL) and Bonneville Dam (BON).
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(httr)
+library(readr)
+library(tidyverse)
+library(tibble)
+library(here)
+library(lubridate)
+library(reshape2)
+library(egg)
+library(kableExtra)
+library(stringr)
+library(knitr)
+res<-GET("https://api.ptagis.org/reporting/reports/Flora1792/file/Entiat_Forecast_2.csv",accept('text/plain'))
+res
+returns<-content(res,encoding = "UTF-16LE")
+
+returns$`Release Date` <- as.Date(
+  returns$`Release Date`, format("%m/%d/%Y"))
+returns$`First Obs Date Max` <- as.Date(
+  returns$`First Obs Date Max`, format("%m/%d/%Y"))
+returns$`Last Obs Date Min` <- as.Date(
+  returns$`Last Obs Date Min`, format("%m/%d/%Y"))
+
+my_returns <- select(returns,'Tag', 'Site', 'First Obs Date Max', 'Brood Year', 'Release Date') %>% 
+  mutate(Age = as.integer(format(returns$`First Obs Date Max`,"%Y")) - `Brood Year`)
+colnames(my_returns) <- c("Tagcode", "SiteName", "MigYear", "BroodYear", "RelYear", "Age")
+my_returns$SiteName = substr(my_returns$SiteName, 1,3)
+
+adult_migrants <- my_returns %>%
+  filter( Age > 2 & Age < 8)
+adult_migrants$MigYear <- year(adult_migrants$MigYear)
+adult_migrants$RelYear <- year(adult_migrants$RelYear)
+
+#Create efficiency from detections at the lower river array and the adult ladder and upper river arrays
+Efficiency<-read.csv("Lower Array Efficiency.csv")
+
+Efficiency2<-select(Efficiency, 'Tag.Code','Site.Name','Release.Date.MMDDYYYY','Brood.Year.YYYY','First.Obs.Date.Max','Last.Obs.Date.Min')
+
+Efficiency2$'Release.Date.MMDDYYYY'<-as.Date(Efficiency2$'Release.Date.MMDDYYYY',format = "%M/%d/%Y")
+Efficiency2$First.Obs.Date.Max<-as.Date(Efficiency2$First.Obs.Date.Max,format = "%M/%d/%Y")
+Efficiency2$Last.Obs.Date.Min<-as.Date(Efficiency2$Last.Obs.Date.Min,format = "%M/%d/%Y")
+
+
+Efficiency3<-Efficiency2 %>%
+  select('Tag.Code','Site.Name','Release.Date.MMDDYYYY','Brood.Year.YYYY','First.Obs.Date.Max') %>%
+  filter(Site.Name=="Hatchery"|
+           Site.Name=="Lower"|
+           Site.Name=="Upper")
+  
+Efficiency3<- Efficiency3 %>%
+  mutate(Age=as.integer(format(Efficiency3$First.Obs.Date.Max,"%Y"))-Brood.Year.YYYY)
+
+colnames(Efficiency3)<-c("TagCode","SiteName","RelYear","BroodYear","MigYear","Age")
+
+adults<-Efficiency3 %>%
+  filter(Age>2&Age<7)
+adults$MigYear<-year(adults$MigYear)
+adults$RelYear<-year(adults$RelYear)
+
+EfficiencyPivot<-adults %>%
+  filter(duplicated(paste(adults$TagCode,adults$SiteName) != TRUE)) %>%
+  count(MigYear,SiteName) %>%
+  spread(SiteName,n,fill = 0) %>%
+  arrange(MigYear) %>%
+  filter(MigYear>2017) %>%
+  mutate("Conversion" = round((Hatchery/Lower),2))
+colnames(EfficiencyPivot)<-c("Migration Year","ENFH Array","Lower Entiat Array","Upper Entiat Array", "Conversion Rate")
+
+```
+
+
+
+```{r echo=FALSE}
+
+EfficiencyPivot %>%
+  kbl(caption = paste0("Table 1. ENFH-origin summer Chinook Salmon PIT detections and conversion rate from lower Entiat River instream PIT array to ENFH Adult Ladder PIT array, including overshoots to the upper Entiat.")) %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),full_width = F, position = "left")
+```
+
+```{r echo=FALSE}
+
+ConversionTable<-EfficiencyPivot %>%
+  select(`Migration Year`,`ENFH Array`, `Lower Entiat Array`) %>%
+  filter(`Migration Year`>2017) %>%
+  mutate("Conversion" = round((`ENFH Array`/`Lower Entiat Array`),3))
+dm<-melt(ConversionTable,id.var=1)
+dm<-dm[1:10,]
+ConversionMean<-mean(ConversionTable$Conversion)
+```
+Taking the mean of the conversion rates found from 2017-2022 shows that on average, 99% of fish that are detected at the Lower Entiat River PIT array will arrive and be detected at the Entiat National Fish Hatchery. Using the same logic, we can estimate the amount of fish from PIT detections at Bonneville and Rocky Reach Dams.  
+  
+Table 2 shows the methods used to develop the Entiat forecast. Conversion rate (C) represents the average survival of adults between Bonneville Dam and Entiat National Fish Hatchery (Table 2). The Lower Entiat antenna detected 86% of the PIT-tagged adult Chinook Salmon migrating up the Entiat River which was included in the conversion rate. ENL was installed in 2007 and available data includes 2007 to present. The average conversion rate for these years was `r round(ConversionMean, 2)`.
+
+```{r echo=FALSE}
+GregEffic<-adult_migrants %>%
+  filter(duplicated(paste(adult_migrants$Tagcode,adult_migrants$SiteName)!=TRUE)) %>%
+  filter(SiteName=="BON"|
+           SiteName=="EHL"|
+           SiteName=="RRF") %>%
+  count(MigYear,SiteName) %>%
+  spread(SiteName,n,fill = 0) %>%
+  arrange(MigYear) %>%
+  filter(MigYear>2017) %>%
+  mutate("BONCONV"=round(((EHL/.86)/BON),2)) %>%
+  mutate("RRFCONV"=round(((EHL/.86)/RRF),2)) %>%
+  rename(Year=MigYear)
+col_order<-c("Year","BON","RRF","EHL","BONCONV","RRFCONV")
+GregEffic<-GregEffic[,col_order]
+colnames(GregEffic)<-c("Migration Year", "Bonneville Dam", "ENFH", "Rocky Reach Dam", "Conversion Rate for Bonneville", "Conversion Rate for Rocky Reach")
+BONConvRate<-mean(GregEffic$`Conversion Rate for Bonneville`)
+RRFConvRate<-mean(GregEffic$`Conversion Rate for Rocky Reach`)
+```
+
+```{r echo=FALSE}
+GregEffic %>%
+  kbl(caption = paste0("Table 2. ENFH-origin summer Chinook Salmon PIT detections and conversion rate from Bonneville Dam PIT array and Rocky Reach Dam PIT array to ENFH Adult Ladder PIT array.")) %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),full_width = F, position = "left")
+```
+On average, 49% of the fish detected at Bonneville Dam and 66% of the fish detected at Rocky Reach Dam will be detected at the ENFH. 
+
+
+```{r echo=FALSE}
+CurrentCounts<-adult_migrants %>%
+  count(MigYear,BroodYear,Age,SiteName) %>%
+  spread(SiteName,n,fill = 0) %>%
+  select(MigYear,BroodYear,Age,BON,RRF,ENL) %>%
+  filter(MigYear==year(Sys.Date()))
+```
+
+```{r echo=FALSE}
+PITratios<-read.csv("PITratio.csv",header = TRUE) 
+PITratios<- PITratios %>%
+  mutate(BroodYear=ReleaseYear-2)
+PITratios$BroodYear<-as.integer(PITratios$BroodYear)  
+PITratios$ReleaseNumber<-as.integer(PITratios$ReleaseNumber)  
+PITratios$PIT<-as.integer(PITratios$PIT)
+PITratios$Ratio<-round(PITratios$Ratio, 1)
+```
+
+```{r echo=FALSE}
+currentyear<-data.frame(Age=as.integer(c(3,4,5,6)))
+currentyear<-currentyear %>%
+  mutate(BroodYear=as.integer(year(Sys.Date()))-Age) %>%
+  left_join(select(CurrentCounts, BroodYear, BON, RRF, ENL), by = "BroodYear")
+CurrentPITCounts <- currentyear %>%
+  left_join(PITratios,by= "BroodYear") %>%
+  mutate("ExpandedBONMigrationSize" = BON * Ratio) %>%
+  mutate("ExpandedRRFMigrationSize"=RRF * Ratio) %>%
+  mutate("ExpandedENLMigrationSize"=ENL*Ratio) %>%
+  rename("Brood Year" = BroodYear, "Bonneville Count" = BON, "Rocky Reach Count" = RRF, "Lower Entiat Count" = ENL, "Release Year" = ReleaseYear, "Number Released" = ReleaseNumber, "Number Tagged" = PIT, "Ratio Released:Tagged" =  Ratio, "Expanded Bonneville Migration Size" = ExpandedBONMigrationSize, "Expanded Rocky Reach Migration Size" = ExpandedRRFMigrationSize, "Expanded Lower Entiat Migration Size" = ExpandedENLMigrationSize) %>%
+  replace_na(list("Bonneville Count" = 0, "Rocky Reach Count" = 0, "Lower Entiat Count" = 0, "Expanded Bonneville Migration Size" = 0, "Expanded Rocky Reach Migration Size" = 0, "Expanded Lower Entiat Migration Size" = 0))
+col_order<-c("Age","Release Year","Brood Year","Number Released","Number Tagged","Ratio Released:Tagged", "Bonneville Count", "Expanded Bonneville Migration Size", "Rocky Reach Count", "Expanded Rocky Reach Migration Size", "Lower Entiat Count", "Expanded Lower Entiat Migration Size")
+CurrentPITCounts<-CurrentPITCounts[,col_order]
+```
+
+```{r echo=FALSE}
+CurrentPITCounts %>%
+  kbl(caption = paste0("Table 3. ", format(Sys.Date(),'%Y'), " ENFH-origin summer Chinook Salmon PIT detections at Bonneville Dam PIT array, Rocky Reach Dam PIT array, and the Lower Entiat River PIT array and resulting estimates of total fish at each detection point.")) %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"))
+```
+```{r echo=FALSE}
+dart<-read.csv("hrt_pitadult_entiat.csv",header = TRUE)
+dart<-dart[,1:10]
+
+if (format(Sys.Date(), "%j") < format(as.Date(dart[2,3], format="%m/%d"), "%j")) {
+  percent_run <- 0
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dart[2,3], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dart[2,4], format="%m/%d"), "%j")){
+    percent_run <- 0.05
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dart[2,4], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dart[2,5], format="%m/%d"), "%j")){
+    percent_run <- 0.10
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dart[2,5], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dart[2,6], format="%m/%d"), "%j")) {
+    percent_run <- 0.25
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dart[2,6], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dart[2,7], format="%m/%d"), "%j")) {
+    percent_run <- 0.5
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dart[2,7], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dart[2,8], format="%m/%d"), "%j")) {
+    percent_run <- 0.75
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dart[2,8], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dart[2,9], format="%m/%d"), "%j")) {
+    percent_run <- 0.90
+  } else if (format(Sys.Date(), "%j") > format(as.Date(dart[2,9], format="%m/%d"), "%j") &
+         format(Sys.Date(), "%j") <= format(as.Date(dart[2,10], format="%m/%d"), "%j")) {
+    percent_run <- 0.95
+  } else percent_run <- 1
+```
+## Current Run
+`r if(sum(CurrentPITCounts$"Expanded Bonneville Migration Size") * BONConvRate + 0.0001 /(0.001 + percent_run)  < 1 ){
+  "**No PIT tags have been detected yet. Hopefully, fish are still on their way!**"
+} else {
+  paste("**Forecast to Entiat River:", round(sum(CurrentPITCounts$"Expanded Bonneville Migration Size**") * BONConvRate / percent_run))
+}`
+<br>
+Based on average run timing characteristics the Entiat River summer Chinook run is `r paste(100 * percent_run,"%", sep = "")` complete (Columbia Basin Research DART 2023). However, the average run timing may not closely represent this year's run. Beer (2007) found significant correlation between in-stream conditions (temperature and flow) and run timing. Conditions in 2023 may closely follow 2017 when slightly above average snowpack resulted in prolonged high flows and a later run. 
+
+```{r echo=FALSE}
+MigrationTiming<-returns %>%
+  filter(duplicated(paste(returns$Tag,returns$`First Obs Date Max`)!=TRUE))%>%
+  filter(Site=="BON") %>%
+  select('Tag', 'First Obs Date Max') %>%
+  arrange(`First Obs Date Max`) %>%
+  filter(`First Obs Date Max`>'2017-01-01') %>%
+  group_by(`First Obs Date Max`) %>%
+  summarise(NumberofFish=n()) %>%
+  mutate(Year=year(`First Obs Date Max`))
+MigrationTiming$`First Obs Date Max`<-format(MigrationTiming$`First Obs Date Max`,"%m/%d")
+```
+
+```{r, fig.width=15,fig.height=10, echo=FALSE}
+ggplot(MigrationTiming,aes(as.Date(`First Obs Date Max`,format="%m/%d"),NumberofFish, group=Year,colour=Year))+
+  geom_line(linewidth=0.6)+
+  theme_article()+
+  scale_color_gradientn(colours = rainbow(6))+
+  xlab("Migration Date")+
+  ylab("Number of PIT-tagged Fish Detected")+
+  labs(colour="Year")+
+  ggtitle("Entiat Summer Chinook PIT Tag Detections over Bonneville")+
+  labs(caption = "Graph 1. Comparison of Entiat Summer Chinook run timing via Bonneville PIT tag detections from 2017-2022 (PTAGIS 2023).")+
+  theme(plot.title = element_text(hjust = 0.5,size = 25,face = "bold"), axis.title.x = element_text(size = 20),axis.title.y = element_text(size=20),axis.text = element_text(size=15),legend.title = element_text(size=20),legend.key.height = unit(2,"cm"),legend.text = element_text(size = 15), plot.caption = element_text(size = 18))
+```
+
+## Run Timing
+<br>
+The first Entiat fish passes over Bonneville Dam on average May 24th, and the last fish on average July 27th (Columbia Basin Research DART 2023). As you can see from the above plot, the actual dates vary year to year. 
+<br>
+
+### References  
+
+    Beer, W.N., 2007. Run timing of adult Chinook Salmon passing Bonneville 
+      Dam on the Columbia River, Seattle: Columbia Basin Research, 
+      White Paper, University of Washington.
+    
+    Knudsen C.M., Johnston M.V., Schroder S.L., Bosch W.J., Fast D.E., 
+      Strom C.R., 2011. Effects of Passive Integrated Transponder tags on 
+      smolt-to-adult recruit survival, growth, and behavior of hatchery 
+      spring Chinook Salmon. North Am. Journal of Fisheries Management 29:658-669, 2009
+      
+    McDonald, T.L., S.C. Amstrup, and B.F.J. Manly. 2003.Tag loss can bias
+      Jolly-Seber capture-recapture esti-mates. Wildlife Society Bulletin 31:814-822.
+    
+    Prentice, E.F., D.J. Maynard, S.L. Downing, D.A. Frost,M. S. Kellett, 
+      D. A. Bruland, P. Sparks-McConkey, F.W. Waknitz, R. N. Iwamoto, K. McIntyre, 
+      and N.Paasch. 1994. Comparison of long-term effects of PIT tags and CW tags 
+      on coho salmon (Oncorhynchus kisutch).Pages 123-137 in A study to determine
+      the biological feasibility of a new fish tagging system.
