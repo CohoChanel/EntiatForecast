@@ -175,6 +175,7 @@ CurrentPITCounts %>%
   kbl(caption = paste0("Table 3. ", format(Sys.Date(),'%Y'), " ENFH-origin summer Chinook Salmon PIT detections at Bonneville Dam PIT array, Rocky Reach Dam PIT array, and the Lower Entiat River PIT array and resulting estimates of total fish at each detection point.")) %>%
   kable_styling(bootstrap_options = c("striped","hover","condensed"))
 ```
+
 ```{r echo=FALSE}
 dart<-read.csv("hrt_pitadult_entiat.csv",header = TRUE)
 dart<-dart[,1:10]
@@ -236,7 +237,7 @@ ggplot(MigrationTiming,aes(as.Date(`First Obs Date Max`,format="%m/%d"),Numberof
   labs(colour="Year")+
   ggtitle("Entiat Summer Chinook PIT Tag Detections over Bonneville")+
   labs(caption = "Graph 1. Comparison of Entiat Summer Chinook run timing via Bonneville PIT tag detections from 2017-2022 (PTAGIS 2023).")+
-  theme(plot.title = element_text(hjust = 0.5,size = 25,face = "bold"), axis.title.x = element_text(size = 20),axis.title.y = element_text(size=20),axis.text = element_text(size=15),legend.title = element_text(size=20),legend.key.height = unit(2,"cm"),legend.text = element_text(size = 15), plot.caption = element_text(size = 18))
+  theme(plot.title = element_text(hjust = 0.5,size = 25,face = "bold"), axis.title.x = element_text(size = 20),axis.title.y = element_text(size=20),axis.text = element_text(size=15),legend.title = element_text(size=20),legend.key.height = unit(2,"cm"),legend.text = element_text(size = 15), plot.caption = element_text(size = 18), panel.background = element_rect(fill = "gray92"))
 ```
 
 ## Run Timing
